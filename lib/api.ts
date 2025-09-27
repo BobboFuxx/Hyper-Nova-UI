@@ -1,5 +1,5 @@
 // lib/api.ts
-import { SigningStargateClient } from "@cosmjs/stargate";
+import { SigningStargateClient, GasPrice } from "@cosmjs/stargate";
 import { ethers } from "ethers";
 import { Connection, PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
 
@@ -110,6 +110,44 @@ async function executeSolanaTrade(
   return signature;
 }
 
+// ---------------- Fee estimation
+export async function estimateFee({
+  address,
+  side,
+  amount,
+  price,
+  chain,
+}: {
+  address: string | PublicKey;
+  side: "buy" | "sell";
+  amount: number;
+  price: number;
+  chain: string; // "Cosmos" | "EVM" | "Solana"
+}): Promise<number> {
+  switch (chain) {
+    case "Cosmos":
+      // TODO: calculate actual gas from contract call
+      const rpcUrl = process.env.NEXT_PUBLIC_HYPERNOVA_RPC!;
+      const gasPrice = GasPrice.fromString("0.025unova"); // example
+      const estimatedGas = 200000; // placeholder
+      return estimatedGas * gasPrice.amount.toNumber() / 1e6; // returns in UNOVA
+    case "EVM":
+      if (!window.ethereum) throw new Error("EVM wallet not found");
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const gasPriceEVM = await provider.getGasPrice();
+      const estimatedGasEVM = ethers.BigNumber.from("21000"); // placeholder
+      return parseFloat(ethers.utils.formatEther(gasPriceEVM.mul(estimatedGasEVM)));
+    case "Solana":
+      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC!);
+      const feeCalculator = await connection.getRecentBlockhash();
+      const lamportsPerSignature = feeCalculator.feeCalculator.lamportsPerSignature;
+      const numSignatures = 1; // placeholder
+      return (lamportsPerSignature * numSignatures) / 1e9; // returns in SOL
+    default:
+      throw new Error(`Unsupported chain: ${chain}`);
+  }
+}
+
 // ---------------- Multi-chain executor
 export async function executeTrade({
   address,
@@ -135,19 +173,3 @@ export async function executeTrade({
       throw new Error(`Unsupported chain: ${chain}`);
   }
 }
-
-/**
- * -------------------------------
- * TODO Checklist (in order)
- * -------------------------------
- * 1. Deploy market/trading contracts/programs for each chain.
- * 2. Replace Cosmos placeholder message with actual contract execute message.
- * 3. Replace Solana placeholder transfer with proper program instruction.
- * 4. Update contract/program addresses and RPC endpoints in .env.
- * 5. Ensure proper amount/price encoding for each chain.
- * 6. Implement error handling and gas/fee estimation for Cosmos and Solana.
- * 7. Test on testnet for each chain individually.
- * 8. Integrate with frontend TradeForm.tsx and WalletConnect.tsx.
- * 9. Add notifications for success/failure of transactions.
- * 10. Deploy to mainnet after thorough testing.
- */
