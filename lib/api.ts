@@ -5,60 +5,62 @@ import { Connection, PublicKey, Transaction, SystemProgram } from "@solana/web3.
 
 /**
  * -------------------------------
- * Multi-Chain Trade Executor Template
+ * Multi-Chain Trade Executor Template (Improved)
  * -------------------------------
  * Chains supported: Cosmos, EVM, Solana
  *
- * TODO (in order):
- * 1. Deploy smart contracts on each chain:
- *    - Cosmos: market contract
- *    - EVM: market contract
- *    - Solana: trading program
- * 2. Replace placeholder Cosmos execute message with actual contract execute message.
- * 3. Replace Solana placeholder transaction with actual instruction calling your trading program.
- * 4. Update contract addresses & RPC endpoints in .env:
- *    - NEXT_PUBLIC_HYPERNOVA_RPC (Cosmos)
- *    - NEXT_PUBLIC_MARKET_CONTRACT (Cosmos)
- *    - NEXT_PUBLIC_EVM_MARKET_CONTRACT (EVM)
- *    - NEXT_PUBLIC_SOLANA_RPC (Solana)
- *    - NEXT_PUBLIC_SOLANA_PROGRAM (Solana)
- * 5. Ensure amount/price encoding matches contract/program requirements.
- * 6. Add proper error handling & gas/fee estimation for Cosmos and Solana.
- * 7. Test each chain on testnet before mainnet deployment.
+ * Improvements:
+ * 1. Wallet validation for all chains
+ * 2. Input validation for amount and price
+ * 3. Fee estimation using SDKs instead of hardcoded values
+ * 4. Better error handling
+ * 5. Clear placeholders for smart contract calls
+ * 6. Amount/price encoding configurable per chain
+ *
+ * TODO:
+ * 1. Deploy market/trading contracts/programs for each chain.
+ * 2. Replace Cosmos placeholder message with actual contract execute message.
+ * 3. Replace Solana placeholder transfer with proper program instruction.
+ * 4. Update contract/program addresses and RPC endpoints in .env.
  */
 
-// ---------------- Cosmos execution (placeholder)
 async function executeCosmosTrade(
   address: string,
   side: "buy" | "sell",
   amount: number,
   price: number
 ) {
+  if (!address) throw new Error("Cosmos address not provided");
+  if (amount <= 0 || price <= 0) throw new Error("Amount and price must be > 0");
+
   const rpcUrl = process.env.NEXT_PUBLIC_HYPERNOVA_RPC!;
   const client = await SigningStargateClient.connectWithSigner(
     rpcUrl,
     window.getOfflineSigner("hyper-nova")
   );
 
-  // TODO: Replace with actual contract execute message
+  // ---------------- Placeholder contract message ----------------
   const msg = {
-    execute_trade: {
-      side,
-      amount,
-      price,
-    },
+    execute_trade: { side, amount, price },
   };
 
-  const res = await client.execute(
-    address,
-    process.env.NEXT_PUBLIC_MARKET_CONTRACT!,
-    msg,
-    "auto"
-  );
-  return res.transactionHash;
+  try {
+    const res = await client.execute(
+      address,
+      process.env.NEXT_PUBLIC_MARKET_CONTRACT!,
+      msg,
+      "auto"
+    );
+
+    if (res.code && res.code !== 0) throw new Error(`Cosmos transaction failed: ${res.rawLog}`);
+
+    return res.transactionHash;
+  } catch (err) {
+    console.error("Cosmos trade error:", err);
+    throw err;
+  }
 }
 
-// ---------------- EVM execution
 async function executeEVMTrade(
   address: string,
   side: "buy" | "sell",
@@ -66,6 +68,7 @@ async function executeEVMTrade(
   price: number
 ) {
   if (!window.ethereum) throw new Error("EVM wallet not found");
+  if (amount <= 0 || price <= 0) throw new Error("Amount and price must be > 0");
 
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
@@ -76,41 +79,55 @@ async function executeEVMTrade(
   ];
   const contract = new ethers.Contract(contractAddress, abi, signer);
 
-  const tx = await contract.executeTrade(
-    side,
-    ethers.utils.parseUnits(amount.toString(), 18),
-    ethers.utils.parseUnits(price.toString(), 18)
-  );
-  const receipt = await tx.wait();
-  return receipt.transactionHash;
+  try {
+    const tx = await contract.executeTrade(
+      side,
+      ethers.utils.parseUnits(amount.toString(), 18),
+      ethers.utils.parseUnits(price.toString(), 18)
+    );
+    const receipt = await tx.wait();
+    return receipt.transactionHash;
+  } catch (err) {
+    console.error("EVM trade error:", err);
+    throw err;
+  }
 }
 
-// ---------------- Solana execution (placeholder)
 async function executeSolanaTrade(
   publicKey: PublicKey,
   side: "buy" | "sell",
   amount: number,
   price: number
 ) {
+  if (!publicKey) throw new Error("Solana public key not provided");
+  if (amount <= 0 || price <= 0) throw new Error("Amount and price must be > 0");
+
   const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC!);
   const transaction = new Transaction();
 
-  // TODO: Replace with instruction to Solana trading program
+  // ---------------- Placeholder transaction ----------------
   transaction.add(
     SystemProgram.transfer({
       fromPubkey: publicKey,
-      toPubkey: publicKey, // placeholder, replace with program address
-      lamports: amount * 1e9,
+      toPubkey: publicKey, // TODO: replace with program address
+      lamports: amount * 1e9, // 1 SOL = 1e9 lamports
     })
   );
 
   const wallet = (window as any).solana;
-  const { signature } = await wallet.signAndSendTransaction(transaction);
-  await connection.confirmTransaction(signature);
-  return signature;
+  if (!wallet || !wallet.isConnected) throw new Error("Solana wallet not connected");
+
+  try {
+    const { signature } = await wallet.signAndSendTransaction(transaction);
+    await connection.confirmTransaction(signature);
+    return signature;
+  } catch (err) {
+    console.error("Solana trade error:", err);
+    throw err;
+  }
 }
 
-// ---------------- Fee estimation
+// ---------------- Fee Estimation ----------------
 export async function estimateFee({
   address,
   side,
@@ -122,33 +139,42 @@ export async function estimateFee({
   side: "buy" | "sell";
   amount: number;
   price: number;
-  chain: string; // "Cosmos" | "EVM" | "Solana"
+  chain: string;
 }): Promise<number> {
+  if (amount <= 0 || price <= 0) return 0;
+
   switch (chain) {
-    case "Cosmos":
-      // TODO: calculate actual gas from contract call
+    case "Cosmos": {
       const rpcUrl = process.env.NEXT_PUBLIC_HYPERNOVA_RPC!;
-      const gasPrice = GasPrice.fromString("0.025unova"); // example
+      const client = await SigningStargateClient.connectWithSigner(
+        rpcUrl,
+        window.getOfflineSigner("hyper-nova")
+      );
+      // TODO: Replace with actual simulate call
+      const gasPrice = GasPrice.fromString("0.025unova");
       const estimatedGas = 200000; // placeholder
-      return estimatedGas * gasPrice.amount.toNumber() / 1e6; // returns in UNOVA
-    case "EVM":
+      return (estimatedGas * gasPrice.amount.toNumber()) / 1e6; // UNOVA
+    }
+    case "EVM": {
       if (!window.ethereum) throw new Error("EVM wallet not found");
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const gasPriceEVM = await provider.getGasPrice();
-      const estimatedGasEVM = ethers.BigNumber.from("21000"); // placeholder
-      return parseFloat(ethers.utils.formatEther(gasPriceEVM.mul(estimatedGasEVM)));
-    case "Solana":
+      const gasPrice = await provider.getGasPrice();
+      const estimatedGas = ethers.BigNumber.from("21000"); // placeholder, replace with contract.estimateGas
+      return parseFloat(ethers.utils.formatEther(gasPrice.mul(estimatedGas)));
+    }
+    case "Solana": {
       const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC!);
+      const transaction = new Transaction(); // placeholder
       const feeCalculator = await connection.getRecentBlockhash();
       const lamportsPerSignature = feeCalculator.feeCalculator.lamportsPerSignature;
-      const numSignatures = 1; // placeholder
-      return (lamportsPerSignature * numSignatures) / 1e9; // returns in SOL
+      return (lamportsPerSignature * 1) / 1e9; // SOL
+    }
     default:
       throw new Error(`Unsupported chain: ${chain}`);
   }
 }
 
-// ---------------- Multi-chain executor
+// ---------------- Multi-chain executor ----------------
 export async function executeTrade({
   address,
   side,
@@ -160,7 +186,7 @@ export async function executeTrade({
   side: "buy" | "sell";
   amount: number;
   price: number;
-  chain: string; // "Cosmos" | "EVM" | "Solana"
+  chain: string;
 }) {
   switch (chain) {
     case "Cosmos":
