@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { getClient } from "../utils/rpc"; // Cosmos gRPC/RPC
-import { subscribeTradesWS, subscribeCandlesWS } from "../utils/ws"; // WebSocket utils
+import { getClient, subscribeTrades, subscribeCandles } from "../utils/rpc";
 
 export interface Trade {
   price: number;
@@ -24,24 +23,24 @@ export function useMarket(symbol: string) {
   const tradesSub = useRef<WebSocket | null>(null);
   const candlesSub = useRef<WebSocket | null>(null);
 
-  // Subscribe to trades via WebSocket (fast updates)
-  const subscribeTrades = () => {
+  /** Subscribe to live trades */
+  const startTradesSubscription = () => {
     if (!symbol) return;
 
     if (tradesSub.current) tradesSub.current.close();
 
-    tradesSub.current = subscribeTradesWS(symbol, (newTrade: Trade) => {
-      setTrades(prev => [newTrade, ...prev].slice(0, 100)); // keep latest 100 trades
+    tradesSub.current = subscribeTrades(symbol, (newTrade: Trade) => {
+      setTrades(prev => [newTrade, ...prev].slice(0, 100)); // keep last 100 trades
     });
   };
 
-  // Subscribe to candlestick updates via WebSocket (fast updates)
-  const subscribeCandles = () => {
+  /** Subscribe to live candles */
+  const startCandlesSubscription = () => {
     if (!symbol) return;
 
     if (candlesSub.current) candlesSub.current.close();
 
-    candlesSub.current = subscribeCandlesWS(symbol, (newCandle: Candle) => {
+    candlesSub.current = subscribeCandles(symbol, (newCandle: Candle) => {
       setCandles(prev => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
@@ -55,7 +54,7 @@ export function useMarket(symbol: string) {
     });
   };
 
-  // Load initial trades & candles from RPC/gRPC
+  /** Load initial market data via RPC/gRPC */
   useEffect(() => {
     if (!symbol) return;
 
@@ -63,14 +62,14 @@ export function useMarket(symbol: string) {
       try {
         const client = await getClient();
 
-        // Example gRPC call to get recent trades
+        // Fetch recent trades
         const tradesRes: Trade[] = await client.queryContractSmart(
           process.env.NEXT_PUBLIC_MARKET_CONTRACT!,
           { get_recent_trades: { symbol } }
         );
         setTrades(tradesRes);
 
-        // Example gRPC call to get OHLC candles
+        // Fetch OHLC candles
         const candlesRes: Candle[] = await client.queryContractSmart(
           process.env.NEXT_PUBLIC_MARKET_CONTRACT!,
           { get_ohlc: { symbol } }
@@ -89,5 +88,10 @@ export function useMarket(symbol: string) {
     };
   }, [symbol]);
 
-  return { trades, candles, subscribeTrades, subscribeCandles };
+  return {
+    trades,
+    candles,
+    subscribeTrades: startTradesSubscription,
+    subscribeCandles: startCandlesSubscription,
+  };
 }
