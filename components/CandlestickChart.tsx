@@ -1,30 +1,70 @@
-import { useEffect, useState } from "react";
-import { fetchCandles } from "../utils/rpc";
-import { Chart } from "react-charts";
+import { useEffect, useRef } from "react";
+import { createChart, IChartApi, UTCTimestamp } from "lightweight-charts";
 
-interface Props {
-  market: string;
-  icyTheme: boolean;
+interface Candle {
+  time: UTCTimestamp;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
-export default function CandlestickChart({ market, icyTheme }: Props) {
-  const [data, setData] = useState<any[]>([]);
+interface CandleChartProps {
+  data: Candle[];
+  icyMode?: boolean; // toggle between icy and classic candle colors
+}
+
+export default function CandleChart({ data, icyMode = false }: CandleChartProps) {
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
-    const loadCandles = async () => {
-      const d = await fetchCandles(market);
-      setData(d);
-    };
-    loadCandles();
-  }, [market]);
+    if (!chartContainerRef.current) return;
 
-  return (
-    <div className="border rounded p-2">
-      <h3 className="font-semibold mb-2">{market} Candles</h3>
-      {/* Placeholder for chart */}
-      <div className="h-64 bg-gray-100 flex items-center justify-center">
-        <span>{icyTheme ? "Icy Theme Chart" : "Classic Chart"}</span>
-      </div>
-    </div>
-  );
+    // create chart
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 400,
+      layout: {
+        background: { color: "#0f172a" },
+        textColor: "#cbd5e1",
+      },
+      grid: {
+        vertLines: { color: "#1e293b" },
+        horzLines: { color: "#1e293b" },
+      },
+      timeScale: {
+        timeVisible: true,
+        borderColor: "#334155",
+      },
+    });
+
+    const series = chart.addCandlestickSeries({
+      upColor: icyMode ? "#38bdf8" : "#22c55e", // icy blue or classic green
+      downColor: icyMode ? "#a78bfa" : "#ef4444", // icy purple or classic red
+      borderDownColor: icyMode ? "#a78bfa" : "#ef4444",
+      borderUpColor: icyMode ? "#38bdf8" : "#22c55e",
+      wickDownColor: icyMode ? "#a78bfa" : "#ef4444",
+      wickUpColor: icyMode ? "#38bdf8" : "#22c55e",
+    });
+
+    series.setData(data);
+
+    chartRef.current = chart;
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    };
+  }, [data, icyMode]);
+
+  return <div ref={chartContainerRef} className="w-full h-[400px]" />;
 }
