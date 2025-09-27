@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "../hooks/useWallet";
 import { useTrades } from "../hooks/useTrades";
@@ -6,12 +6,13 @@ import { useTrades } from "../hooks/useTrades";
 export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
   const { 
+    loading, 
     error, 
     lastTx, 
     placeSpotTrade, 
-    getSpotTradeFee, 
+    getSpotFee, 
     placePerpTrade, 
-    getPerpTradeFee 
+    getPerpFee 
   } = useTrades();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -19,47 +20,74 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const [price, setPrice] = useState("");
   const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
   const parsedAmount = parseFloat(amount);
   const parsedPrice = parseFloat(price);
   const connected = !!connectedAddress && !!activeWallet;
 
-  // -------------------- Fee estimation --------------------
-  useEffect(() => {
+  const feeInterval = useRef<NodeJS.Timer | null>(null);
+
+  // -------------------- Unified fee estimation --------------------
+  const estimateCurrentFee = useCallback(async () => {
     if (!connected || parsedAmount <= 0 || parsedPrice <= 0) {
       setEstimatedFee(null);
       return;
     }
 
-    const handler = setTimeout(async () => {
-      try {
-        const fee =
-          marketType === "spot"
-            ? await getSpotTradeFee({
-                chain: activeWallet,
-                address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
-                side,
-                amount: parsedAmount,
-                price: parsedPrice,
-              })
-            : await getPerpTradeFee({
-                chain: activeWallet,
-                address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
-                side,
-                amount: parsedAmount,
-                price: parsedPrice,
-              });
-        setEstimatedFee(fee);
-      } catch (err) {
-        console.error("Fee estimation failed:", err);
-        setEstimatedFee(null);
-      }
-    }, 500);
+    try {
+      const fee =
+        marketType === "spot"
+          ? await getSpotFee({
+              chain: activeWallet,
+              address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
+              side,
+              amount: parsedAmount,
+              price: parsedPrice,
+            })
+          : await getPerpFee({
+              chain: activeWallet,
+              address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
+              side,
+              amount: parsedAmount,
+              price: parsedPrice,
+            });
+      setEstimatedFee(fee);
+    } catch (err) {
+      console.error("Fee estimation failed:", err);
+      setEstimatedFee(null);
+    }
+  }, [
+    connected,
+    parsedAmount,
+    parsedPrice,
+    marketType,
+    activeWallet,
+    connectedAddress,
+    solanaPublicKey,
+    side,
+    getSpotFee,
+    getPerpFee,
+  ]);
 
+  // -------------------- Debounced fee estimation --------------------
+  useEffect(() => {
+    const handler = setTimeout(estimateCurrentFee, 500);
     return () => clearTimeout(handler);
-  }, [side, parsedAmount, parsedPrice, connected, activeWallet, connectedAddress, solanaPublicKey, marketType, getSpotTradeFee, getPerpTradeFee]);
+  }, [estimateCurrentFee]);
+
+  // -------------------- Real-time fee updates --------------------
+  useEffect(() => {
+    if (feeInterval.current) clearInterval(feeInterval.current);
+
+    if (!connected || parsedAmount <= 0 || parsedPrice <= 0) return;
+
+    feeInterval.current = setInterval(estimateCurrentFee, 5000); // update every 5 seconds
+
+    return () => {
+      if (feeInterval.current) clearInterval(feeInterval.current);
+    };
+  }, [estimateCurrentFee, connected, parsedAmount, parsedPrice]);
 
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,9 +103,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     }
 
     try {
-      setLoading(true);
       setMessage("");
-
       const params = {
         chain: activeWallet,
         address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
@@ -98,8 +124,6 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     } catch (err: any) {
       console.error(err);
       setMessage(error || `Trade failed on ${activeWallet}.`);
-    } finally {
-      setLoading(false);
     }
   };
 
