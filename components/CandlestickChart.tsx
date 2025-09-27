@@ -45,12 +45,15 @@ export default function CandlestickChart({
         vertLines: { color: "#1e293b" },
         horzLines: { color: "#1e293b" },
       },
+      crosshair: {
+        mode: 1,
+      },
       timeScale: {
         timeVisible: true,
         borderColor: "#334155",
       },
-      crosshair: {
-        mode: 1,
+      rightPriceScale: {
+        borderColor: "#334155",
       },
     });
 
@@ -83,5 +86,5 @@ export default function CandlestickChart({
     };
   }, [data, icyMode, width, height]);
 
-  return <div ref={chartContainerRef} className={`w-full h-[${height}px]`} />;
+  return <div ref={chartContainerRef} style={{ width: "100%", height }} />;
 }
