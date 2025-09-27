@@ -1,20 +1,48 @@
-import { useState } from "react";
-import { executeTrade } from "../lib/api";
+import { useState, useEffect } from "react";
+import { executeTrade, estimateFee } from "../lib/api"; // We'll add estimateFee
 import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
 
 export default function TradeForm() {
-  const { activeWallet, address, connect } = useWallet();
+  const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
+
+  const connectedAddress =
+    cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
+
+  // Estimate fee whenever amount, price, or chain changes
+  useEffect(() => {
+    const fetchFee = async () => {
+      if (!connectedAddress || !amount || !price) {
+        setEstimatedFee(null);
+        return;
+      }
+      try {
+        const fee = await estimateFee({
+          address: connectedAddress,
+          chain: activeWallet!,
+          side,
+          amount: parseFloat(amount),
+          price: parseFloat(price),
+        });
+        setEstimatedFee(fee);
+      } catch (err) {
+        console.error("Failed to estimate fee:", err);
+        setEstimatedFee(null);
+      }
+    };
+    fetchFee();
+  }, [connectedAddress, amount, price, side, activeWallet]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!address) {
+    if (!connectedAddress) {
       setMessage("Please connect your wallet first.");
       return;
     }
@@ -29,16 +57,17 @@ export default function TradeForm() {
       setMessage("");
 
       const tx = await executeTrade({
-        address: address,
-        chain: activeWallet!, // "Cosmos" | "EVM" | "Solana"
+        address: connectedAddress,
+        chain: activeWallet!,
         side,
         amount: parseFloat(amount),
         price: parseFloat(price),
       });
 
-      setMessage(`Trade executed on ${activeWallet}! Tx: ${tx}`);
+      setMessage(`Trade executed! Tx: ${tx}`);
       setAmount("");
       setPrice("");
+      setEstimatedFee(null);
     } catch (err: any) {
       console.error(err);
       setMessage("Trade failed. Check console for details.");
@@ -47,25 +76,11 @@ export default function TradeForm() {
     }
   };
 
-  const connected = !!address;
-
-  // Chain color mapping
-  const chainColors: Record<string, string> = {
-    Cosmos: "bg-blue-500 hover:bg-blue-600",
-    EVM: "bg-green-500 hover:bg-green-600",
-    Solana: "bg-purple-500 hover:bg-purple-600",
-  };
+  const connected = !!connectedAddress;
 
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Place Order</h2>
-
-      {connected && (
-        <p className="text-sm text-gray-400 mb-2">
-          Connected with <span className="font-bold">{activeWallet}</span>:{" "}
-          <span className="break-words">{address}</span>
-        </p>
-      )}
 
       {!connected ? (
         <button
@@ -82,9 +97,7 @@ export default function TradeForm() {
               type="button"
               onClick={() => setSide("buy")}
               className={`flex-1 px-3 py-2 rounded-md ${
-                side === "buy"
-                  ? chainColors[activeWallet!]
-                  : "bg-gray-800 text-white"
+                side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"
               }`}
             >
               Buy
@@ -93,9 +106,7 @@ export default function TradeForm() {
               type="button"
               onClick={() => setSide("sell")}
               className={`flex-1 px-3 py-2 rounded-md ${
-                side === "sell"
-                  ? chainColors[activeWallet!]
-                  : "bg-gray-800 text-white"
+                side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"
               }`}
             >
               Sell
@@ -132,7 +143,19 @@ export default function TradeForm() {
             disabled={loading}
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
-            {loading ? "Placing Order..." : `Place ${side.toUpperCase()} Order`}
+            {loading
+              ? "Placing Order..."
+              : `Place ${side.toUpperCase()} Order${
+                  estimatedFee !== null
+                    ? ` (~${estimatedFee.toFixed(6)} ${
+                        activeWallet === "Solana"
+                          ? "SOL"
+                          : activeWallet === "EVM"
+                          ? "ETH"
+                          : "UNOVA"
+                      })`
+                    : ""
+                }`}
           </button>
 
           {/* Status Message */}
