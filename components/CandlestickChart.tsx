@@ -9,12 +9,12 @@ interface Candle {
   close: number;
 }
 
-interface CandleChartProps {
+interface CandlestickChartProps {
   data: Candle[];
   icyMode?: boolean; // toggle between icy and classic candle colors
 }
 
-export default function CandleChart({ data, icyMode = false }: CandleChartProps) {
+export default function CandlestickChart({ data, icyMode = false }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
