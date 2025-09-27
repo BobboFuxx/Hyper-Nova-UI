@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { useWallet } from "../hooks/useWallet";
+import { useState, useEffect } from "react";
 import { executeTrade } from "../lib/api";
+import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
 
 export default function TradeForm() {
-  const { address, connected, connect, chain } = useWallet(); // multi-chain wallet
+  const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
+
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("");
@@ -13,7 +14,10 @@ export default function TradeForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!connected) {
+    const connectedAddress =
+      cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
+
+    if (!connectedAddress) {
       setMessage("Please connect your wallet first.");
       return;
     }
@@ -27,15 +31,20 @@ export default function TradeForm() {
       setLoading(true);
       setMessage("");
 
+      // Determine which chain to use
+      let chain: "Cosmos" | "EVM" | "Solana" = "EVM";
+      if (activeWallet === "Cosmos") chain = "Cosmos";
+      else if (activeWallet === "Solana") chain = "Solana";
+
       const tx = await executeTrade({
-        address,
+        address: connectedAddress,
+        chain,
         side,
         amount: parseFloat(amount),
         price: parseFloat(price),
-        chain, // Pass the active chain for multi-chain execution
       });
 
-      setMessage(`Trade executed on ${chain}! Tx: ${tx}`);
+      setMessage(`Trade executed! Tx: ${tx}`);
       setAmount("");
       setPrice("");
     } catch (err: any) {
@@ -45,6 +54,8 @@ export default function TradeForm() {
       setLoading(false);
     }
   };
+
+  const connected = !!(cosmosAddress || evmAddress || solanaPublicKey);
 
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
@@ -111,7 +122,7 @@ export default function TradeForm() {
             disabled={loading}
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
-            {loading ? `Placing ${side.toUpperCase()} Order...` : `Place ${side.toUpperCase()} Order on ${chain}`}
+            {loading ? "Placing Order..." : `Place ${side.toUpperCase()} Order`}
           </button>
 
           {/* Status Message */}
