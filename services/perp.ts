@@ -2,29 +2,40 @@
 import { executeTrade, estimateFee } from "../lib/api";
 import { PublicKey } from "@solana/web3.js";
 
-export type Chain = "Cosmos" | "EVM" | "Solana";
+/**
+ * Supported chains type
+ */
+type Chain = "Cosmos" | "EVM" | "Solana";
 
-export interface PerpTradeParams {
+/**
+ * Parameters for a perpetual futures trade
+ */
+interface PerpTradeParams {
   chain: Chain;
   address: string | PublicKey;
   side: "buy" | "sell";
   amount: number;
   price: number;
-  // Future: leverage, margin, etc.
 }
 
 /**
- * Place a perpetual futures trade.
+ * Place a perpetual futures trade on any supported chain.
  * Currently supports basic buy/sell without leverage logic.
  */
-export async function placePerpTrade(params: PerpTradeParams) {
-  const { chain, address, side, amount, price } = params;
-
-  if (amount <= 0 || price <= 0) throw new Error("Amount and price must be greater than 0");
+export async function placePerpTrade({
+  chain,
+  address,
+  side,
+  amount,
+  price,
+}: PerpTradeParams) {
+  if (amount <= 0 || price <= 0) {
+    throw new Error("Amount and price must be greater than 0.");
+  }
 
   try {
-    const txHash = await executeTrade({ chain, address, side, amount, price });
-    return txHash;
+    const tx = await executeTrade({ chain, address, side, amount, price });
+    return tx;
   } catch (err) {
     console.error(`Perp trade failed on ${chain}:`, err);
     throw err;
@@ -32,18 +43,23 @@ export async function placePerpTrade(params: PerpTradeParams) {
 }
 
 /**
- * Estimate fees for a perpetual futures trade.
+ * Estimate fees for a perpetual futures trade on any supported chain.
  */
-export async function getPerpTradeFee(params: PerpTradeParams): Promise<number> {
-  const { chain, address, side, amount, price } = params;
-
-  if (amount <= 0 || price <= 0) return 0;
+export async function getPerpTradeFee({
+  chain,
+  address,
+  side,
+  amount,
+  price,
+}: PerpTradeParams) {
+  if (amount <= 0 || price <= 0) {
+    return 0;
+  }
 
   try {
-    const fee = await estimateFee({ chain, address, side, amount, price });
-    return fee;
+    return await estimateFee({ chain, address, side, amount, price });
   } catch (err) {
-    console.warn(`Failed to estimate perp trade fee on ${chain}:`, err);
+    console.warn(`Failed to estimate perp fee on ${chain}:`, err);
     return 0;
   }
 }
