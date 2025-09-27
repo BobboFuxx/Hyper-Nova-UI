@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, IChartApi, UTCTimestamp } from "lightweight-charts";
+import { createChart, IChartApi, UTCTimestamp, CandlestickSeriesPartialOptions } from "lightweight-charts";
 
 interface Candle {
   time: UTCTimestamp;
@@ -12,19 +12,31 @@ interface Candle {
 interface CandlestickChartProps {
   data: Candle[];
   icyMode?: boolean; // toggle between icy and classic candle colors
+  width?: number; // optional custom width
+  height?: number; // optional custom height
 }
 
-export default function CandlestickChart({ data, icyMode = false }: CandlestickChartProps) {
+export default function CandlestickChart({
+  data,
+  icyMode = false,
+  width,
+  height = 400,
+}: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // Remove previous chart if exists
+    if (chartRef.current) {
+      chartRef.current.remove();
+    }
+
     // create chart
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
+      width: width || chartContainerRef.current.clientWidth,
+      height,
       layout: {
         background: { color: "#0f172a" },
         textColor: "#cbd5e1",
@@ -37,24 +49,29 @@ export default function CandlestickChart({ data, icyMode = false }: CandlestickC
         timeVisible: true,
         borderColor: "#334155",
       },
+      crosshair: {
+        mode: 1,
+      },
     });
 
-    const series = chart.addCandlestickSeries({
-      upColor: icyMode ? "#38bdf8" : "#22c55e", // icy blue or classic green
-      downColor: icyMode ? "#a78bfa" : "#ef4444", // icy purple or classic red
+    const candleOptions: CandlestickSeriesPartialOptions = {
+      upColor: icyMode ? "#38bdf8" : "#22c55e",
+      downColor: icyMode ? "#a78bfa" : "#ef4444",
       borderDownColor: icyMode ? "#a78bfa" : "#ef4444",
       borderUpColor: icyMode ? "#38bdf8" : "#22c55e",
       wickDownColor: icyMode ? "#a78bfa" : "#ef4444",
       wickUpColor: icyMode ? "#38bdf8" : "#22c55e",
-    });
+    };
+
+    const series = chart.addCandlestickSeries(candleOptions);
 
     series.setData(data);
 
     chartRef.current = chart;
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
     };
 
@@ -64,7 +81,7 @@ export default function CandlestickChart({ data, icyMode = false }: CandlestickC
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [data, icyMode]);
+  }, [data, icyMode, width, height]);
 
-  return <div ref={chartContainerRef} className="w-full h-[400px]" />;
+  return <div ref={chartContainerRef} className={`w-full h-[${height}px]`} />;
 }
