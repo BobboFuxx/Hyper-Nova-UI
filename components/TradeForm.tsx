@@ -21,6 +21,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const [price, setPrice] = useState("");
   const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [glowIntensity, setGlowIntensity] = useState(0);
 
   const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
   const parsedAmount = parseFloat(amount);
@@ -82,11 +83,9 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   // -------------------- Real-time fee updates --------------------
   useEffect(() => {
     if (feeInterval.current) clearInterval(feeInterval.current);
-
     if (!connected || parsedAmount <= 0 || parsedPrice <= 0) return;
 
     feeInterval.current = setInterval(estimateCurrentFee, 5000);
-
     return () => {
       if (feeInterval.current) clearInterval(feeInterval.current);
     };
@@ -102,18 +101,34 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     (side === "buy" && parsedPrice === bestAsk) ||
     (side === "sell" && parsedPrice === bestBid);
 
+  // -------------------- Animated glow intensity --------------------
+  useEffect(() => {
+    if (!parsedPrice || !bestBid || !bestAsk) return;
+
+    let targetIntensity = 0;
+    if (isBestPrice) {
+      targetIntensity = 1; // full pulse for exact match
+    } else {
+      const diff = side === "buy" ? Math.abs(parsedPrice - bestAsk) : Math.abs(parsedPrice - bestBid);
+      const refPrice = side === "buy" ? bestAsk : bestBid;
+      targetIntensity = Math.max(0, 1 - diff / (refPrice * 0.05));
+    }
+
+    setGlowIntensity((prev) => {
+      const alpha = 0.1; // smoothing factor
+      return prev + (targetIntensity - prev) * alpha;
+    });
+  }, [parsedPrice, bestBid, bestAsk, side, isBestPrice]);
+
+  const glowStyle = isBestPrice
+    ? "bg-yellow-500 text-black animate-pulse cursor-pointer"
+    : `bg-gray-800 text-white shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(255,215,0,${0.6 * glowIntensity})] transition-shadow duration-300 ease-in-out`;
+
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!connected) {
-      setMessage("Please connect your wallet first.");
-      return;
-    }
-    if (parsedAmount <= 0 || parsedPrice <= 0) {
-      setMessage("Enter valid amount and price.");
-      return;
-    }
+    if (!connected) return setMessage("Please connect your wallet first.");
+    if (parsedAmount <= 0 || parsedPrice <= 0) return setMessage("Enter valid amount and price.");
 
     try {
       setMessage("");
@@ -165,18 +180,14 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
             <button
               type="button"
               onClick={() => setSide("buy")}
-              className={`flex-1 px-3 py-2 rounded-md ${
-                side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"
-              }`}
+              className={`flex-1 px-3 py-2 rounded-md ${side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"}`}
             >
               Buy
             </button>
             <button
               type="button"
               onClick={() => setSide("sell")}
-              className={`flex-1 px-3 py-2 rounded-md ${
-                side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"
-              }`}
+              className={`flex-1 px-3 py-2 rounded-md ${side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"}`}
             >
               Sell
             </button>
@@ -190,10 +201,8 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
               step="0.0001"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              onClick={handlePriceClick} // ✅ Suggested amount auto-fill
-              className={`w-full p-2 rounded-md text-white ${
-                isBestPrice ? "bg-yellow-500 animate-pulse text-black cursor-pointer" : "bg-gray-800"
-              }`}
+              onClick={handlePriceClick}
+              className={`w-full p-2 rounded-md ${glowStyle}`}
             />
           </div>
           <div>
