@@ -29,7 +29,6 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const connected = !!connectedAddress && !!activeWallet;
   const feeInterval = useRef<NodeJS.Timer | null>(null);
 
-  // -------------------- Market info for best-price highlighting & suggested amount --------------------
   const { bestBid, bestAsk, lastPrice, suggestedAmount } = useMarket(activeWallet, marketType);
 
   // -------------------- Unified fee estimation --------------------
@@ -101,7 +100,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     (side === "buy" && parsedPrice === bestAsk) ||
     (side === "sell" && parsedPrice === bestBid);
 
-  // -------------------- Animated glow intensity --------------------
+  // -------------------- Animated glow intensity & dynamic color --------------------
   useEffect(() => {
     if (!parsedPrice || !bestBid || !bestAsk) return;
 
@@ -120,9 +119,15 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     });
   }, [parsedPrice, bestBid, bestAsk, side, isBestPrice]);
 
-  const glowStyle = isBestPrice
+  const glowColor = isBestPrice
     ? "bg-yellow-500 text-black animate-pulse cursor-pointer"
-    : `bg-gray-800 text-white shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(255,215,0,${0.6 * glowIntensity})] transition-shadow duration-300 ease-in-out`;
+    : side === "buy"
+    ? `bg-[rgba(0,255,0,${glowIntensity})] text-white` // green for buy
+    : `bg-[rgba(255,0,0,${glowIntensity})] text-white`; // red for sell
+
+  const glowStyle = isBestPrice
+    ? glowColor
+    : `shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(255,215,0,${0.6 * glowIntensity})] transition-shadow duration-300 ease-in-out ${glowColor}`;
 
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
