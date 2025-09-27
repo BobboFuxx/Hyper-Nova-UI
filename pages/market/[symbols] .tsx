@@ -6,20 +6,26 @@ import { useNotifications } from "../../context/Notifications";
 
 export default function MarketPage() {
   const router = useRouter();
-  const { symbol } = router.query;
+  const { symbols } = router.query; // note: plural matches your file structure
   const { notify } = useNotifications();
   const [icyTheme, setIcyTheme] = useState(true);
 
-  const { trades, subscribeTrades } = useMarket(symbol as string);
+  const symbol = Array.isArray(symbols) ? symbols[0] : symbols;
+
+  const { trades, candles, subscribeTrades, subscribeCandles } = useMarket(symbol || "");
 
   useEffect(() => {
-    if (symbol) subscribeTrades();
+    if (symbol) {
+      subscribeTrades();
+      subscribeCandles();
+    }
   }, [symbol]);
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-3xl font-bold">{symbol} Market</h1>
 
+      {/* Theme Toggle */}
       <div className="flex items-center space-x-4">
         <label className="flex items-center space-x-2">
           <input
@@ -31,8 +37,10 @@ export default function MarketPage() {
         </label>
       </div>
 
-      <CandlestickChart market={symbol as string} icyTheme={icyTheme} />
+      {/* Candlestick Chart */}
+      <CandlestickChart data={candles} icyMode={icyTheme} />
 
+      {/* Recent Trades */}
       <div className="mt-4">
         <h2 className="font-bold mb-2">Recent Trades</h2>
         <div className="border p-2 rounded space-y-1 max-h-60 overflow-y-auto">
