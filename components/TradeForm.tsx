@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { executeTrade } from "../lib/api";
-import { useWallet } from "../hooks/useWallet";
+import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
 
 export default function TradeForm() {
   const { activeWallet, address, connect } = useWallet();
@@ -11,12 +11,10 @@ export default function TradeForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const connected = !!address;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!connected) {
+    if (!address) {
       setMessage("Please connect your wallet first.");
       return;
     }
@@ -30,16 +28,15 @@ export default function TradeForm() {
       setLoading(true);
       setMessage("");
 
-      // Execute trade for the active wallet type
       const tx = await executeTrade({
-        address,
+        address: address,
         chain: activeWallet!, // "Cosmos" | "EVM" | "Solana"
         side,
         amount: parseFloat(amount),
         price: parseFloat(price),
       });
 
-      setMessage(`Trade executed! Tx: ${tx}`);
+      setMessage(`Trade executed on ${activeWallet}! Tx: ${tx}`);
       setAmount("");
       setPrice("");
     } catch (err: any) {
@@ -50,13 +47,29 @@ export default function TradeForm() {
     }
   };
 
+  const connected = !!address;
+
+  // Chain color mapping
+  const chainColors: Record<string, string> = {
+    Cosmos: "bg-blue-500 hover:bg-blue-600",
+    EVM: "bg-green-500 hover:bg-green-600",
+    Solana: "bg-purple-500 hover:bg-purple-600",
+  };
+
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Place Order</h2>
 
+      {connected && (
+        <p className="text-sm text-gray-400 mb-2">
+          Connected with <span className="font-bold">{activeWallet}</span>:{" "}
+          <span className="break-words">{address}</span>
+        </p>
+      )}
+
       {!connected ? (
         <button
-          onClick={() => connect(activeWallet || "EVM")} // default to EVM if none
+          onClick={connect}
           className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white"
         >
           Connect Wallet
@@ -69,7 +82,9 @@ export default function TradeForm() {
               type="button"
               onClick={() => setSide("buy")}
               className={`flex-1 px-3 py-2 rounded-md ${
-                side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"
+                side === "buy"
+                  ? chainColors[activeWallet!]
+                  : "bg-gray-800 text-white"
               }`}
             >
               Buy
@@ -78,7 +93,9 @@ export default function TradeForm() {
               type="button"
               onClick={() => setSide("sell")}
               className={`flex-1 px-3 py-2 rounded-md ${
-                side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"
+                side === "sell"
+                  ? chainColors[activeWallet!]
+                  : "bg-gray-800 text-white"
               }`}
             >
               Sell
