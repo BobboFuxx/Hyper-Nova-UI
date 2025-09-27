@@ -3,7 +3,7 @@ import { useWallet } from "../hooks/useWallet";
 import { executeTrade } from "../lib/api";
 
 export default function TradeForm() {
-  const { address, connected, connect } = useWallet(); // multi-chain wallet
+  const { address, connected, connect, chain } = useWallet(); // multi-chain wallet
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("");
@@ -32,9 +32,10 @@ export default function TradeForm() {
         side,
         amount: parseFloat(amount),
         price: parseFloat(price),
+        chain, // Pass the active chain for multi-chain execution
       });
 
-      setMessage(`Trade executed! Tx: ${tx}`);
+      setMessage(`Trade executed on ${chain}! Tx: ${tx}`);
       setAmount("");
       setPrice("");
     } catch (err: any) {
@@ -49,7 +50,6 @@ export default function TradeForm() {
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Place Order</h2>
 
-      {/* Connect Wallet Button */}
       {!connected ? (
         <button
           onClick={connect}
@@ -111,7 +111,7 @@ export default function TradeForm() {
             disabled={loading}
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
-            {loading ? "Placing Order..." : `Place ${side.toUpperCase()} Order`}
+            {loading ? `Placing ${side.toUpperCase()} Order...` : `Place ${side.toUpperCase()} Order on ${chain}`}
           </button>
 
           {/* Status Message */}
