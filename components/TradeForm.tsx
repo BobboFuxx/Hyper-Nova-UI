@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { executeTrade } from "../lib/api";
-import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
+import { useWallet } from "../hooks/useWallet";
 
 export default function TradeForm() {
-  const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
+  const { activeWallet, address, connect } = useWallet();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -11,13 +11,12 @@ export default function TradeForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const connected = !!address;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const connectedAddress =
-      cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
-
-    if (!connectedAddress) {
+    if (!connected) {
       setMessage("Please connect your wallet first.");
       return;
     }
@@ -31,14 +30,10 @@ export default function TradeForm() {
       setLoading(true);
       setMessage("");
 
-      // Determine which chain to use
-      let chain: "Cosmos" | "EVM" | "Solana" = "EVM";
-      if (activeWallet === "Cosmos") chain = "Cosmos";
-      else if (activeWallet === "Solana") chain = "Solana";
-
+      // Execute trade for the active wallet type
       const tx = await executeTrade({
-        address: connectedAddress,
-        chain,
+        address,
+        chain: activeWallet!, // "Cosmos" | "EVM" | "Solana"
         side,
         amount: parseFloat(amount),
         price: parseFloat(price),
@@ -55,15 +50,13 @@ export default function TradeForm() {
     }
   };
 
-  const connected = !!(cosmosAddress || evmAddress || solanaPublicKey);
-
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Place Order</h2>
 
       {!connected ? (
         <button
-          onClick={connect}
+          onClick={() => connect(activeWallet || "EVM")} // default to EVM if none
           className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white"
         >
           Connect Wallet
