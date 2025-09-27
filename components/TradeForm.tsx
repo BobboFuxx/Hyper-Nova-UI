@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "../hooks/useWallet";
 import { useTrades } from "../hooks/useTrades";
+import { useMarket } from "../hooks/useMarket";
 
 export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
@@ -25,8 +26,10 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const parsedAmount = parseFloat(amount);
   const parsedPrice = parseFloat(price);
   const connected = !!connectedAddress && !!activeWallet;
-
   const feeInterval = useRef<NodeJS.Timer | null>(null);
+
+  // -------------------- Market info for best-price highlighting & suggested amount --------------------
+  const { bestBid, bestAsk, lastPrice, suggestedAmount } = useMarket(activeWallet, marketType);
 
   // -------------------- Unified fee estimation --------------------
   const estimateCurrentFee = useCallback(async () => {
@@ -82,7 +85,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
 
     if (!connected || parsedAmount <= 0 || parsedPrice <= 0) return;
 
-    feeInterval.current = setInterval(estimateCurrentFee, 5000); // update every 5 seconds
+    feeInterval.current = setInterval(estimateCurrentFee, 5000);
 
     return () => {
       if (feeInterval.current) clearInterval(feeInterval.current);
@@ -93,6 +96,11 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   useEffect(() => {
     estimateCurrentFee();
   }, [activeWallet, connectedAddress, solanaPublicKey, estimateCurrentFee]);
+
+  // -------------------- Check if current price matches best bid/ask --------------------
+  const isBestPrice =
+    (side === "buy" && parsedPrice === bestAsk) ||
+    (side === "sell" && parsedPrice === bestBid);
 
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,6 +137,13 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     } catch (err: any) {
       console.error(err);
       setMessage(error || `Trade failed on ${activeWallet}.`);
+    }
+  };
+
+  // -------------------- Fill suggested amount when clicking best-price input --------------------
+  const handlePriceClick = () => {
+    if (isBestPrice && suggestedAmount) {
+      setAmount(suggestedAmount.toString());
     }
   };
 
@@ -175,7 +190,10 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
               step="0.0001"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full bg-gray-800 p-2 rounded-md text-white"
+              onClick={handlePriceClick} // ✅ Suggested amount auto-fill
+              className={`w-full p-2 rounded-md text-white ${
+                isBestPrice ? "bg-yellow-500 animate-pulse text-black cursor-pointer" : "bg-gray-800"
+              }`}
             />
           </div>
           <div>
