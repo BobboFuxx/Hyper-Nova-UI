@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { executeTrade, estimateFee } from "../lib/api"; // We'll add estimateFee
+import { executeTrade, estimateFee } from "../lib/api"; // multi-chain API
 import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
 
 export default function TradeForm() {
@@ -15,13 +15,14 @@ export default function TradeForm() {
   const connectedAddress =
     cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
 
-  // Estimate fee whenever amount, price, or chain changes
+  // -------------------- Debounced fee estimation --------------------
   useEffect(() => {
-    const fetchFee = async () => {
-      if (!connectedAddress || !amount || !price) {
-        setEstimatedFee(null);
-        return;
-      }
+    if (!connectedAddress || !amount || !price) {
+      setEstimatedFee(null);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
       try {
         const fee = await estimateFee({
           address: connectedAddress,
@@ -35,10 +36,12 @@ export default function TradeForm() {
         console.error("Failed to estimate fee:", err);
         setEstimatedFee(null);
       }
-    };
-    fetchFee();
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(handler); // cleanup on change
   }, [connectedAddress, amount, price, side, activeWallet]);
 
+  // -------------------- Handle trade submit --------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -137,6 +140,18 @@ export default function TradeForm() {
             />
           </div>
 
+          {/* Fee Display */}
+          {estimatedFee !== null && (
+            <p className="text-sm text-yellow-400">
+              Estimated Fee: {estimatedFee.toFixed(6)}{" "}
+              {activeWallet === "Solana"
+                ? "SOL"
+                : activeWallet === "EVM"
+                ? "ETH"
+                : "UNOVA"}
+            </p>
+          )}
+
           {/* Submit Button */}
           <button
             type="submit"
@@ -145,17 +160,7 @@ export default function TradeForm() {
           >
             {loading
               ? "Placing Order..."
-              : `Place ${side.toUpperCase()} Order${
-                  estimatedFee !== null
-                    ? ` (~${estimatedFee.toFixed(6)} ${
-                        activeWallet === "Solana"
-                          ? "SOL"
-                          : activeWallet === "EVM"
-                          ? "ETH"
-                          : "UNOVA"
-                      })`
-                    : ""
-                }`}
+              : `Place ${side.toUpperCase()} Order`}
           </button>
 
           {/* Status Message */}
