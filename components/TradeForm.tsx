@@ -89,6 +89,11 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     };
   }, [estimateCurrentFee, connected, parsedAmount, parsedPrice]);
 
+  // -------------------- Immediate fee refresh on wallet/chain change --------------------
+  useEffect(() => {
+    estimateCurrentFee();
+  }, [activeWallet, connectedAddress, solanaPublicKey, estimateCurrentFee]);
+
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
