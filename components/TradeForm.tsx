@@ -3,7 +3,7 @@ import { useWallet } from "../hooks/useWallet";
 import { executeTrade } from "../lib/api";
 
 export default function TradeForm() {
-  const { address, connected, connect } = useWallet();
+  const { address, connected, connect } = useWallet(); // multi-chain wallet
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("");
@@ -12,10 +12,12 @@ export default function TradeForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!connected) {
       setMessage("Please connect your wallet first.");
       return;
     }
+
     if (!amount || !price) {
       setMessage("Please enter amount and price.");
       return;
@@ -46,6 +48,8 @@ export default function TradeForm() {
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Place Order</h2>
+
+      {/* Connect Wallet Button */}
       {!connected ? (
         <button
           onClick={connect}
@@ -77,7 +81,7 @@ export default function TradeForm() {
             </button>
           </div>
 
-          {/* Price */}
+          {/* Price Input */}
           <div>
             <label className="block text-sm text-gray-400">Price</label>
             <input
@@ -89,7 +93,7 @@ export default function TradeForm() {
             />
           </div>
 
-          {/* Amount */}
+          {/* Amount Input */}
           <div>
             <label className="block text-sm text-gray-400">Amount</label>
             <input
@@ -101,7 +105,7 @@ export default function TradeForm() {
             />
           </div>
 
-          {/* Submit */}
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
@@ -110,9 +114,8 @@ export default function TradeForm() {
             {loading ? "Placing Order..." : `Place ${side.toUpperCase()} Order`}
           </button>
 
-          {message && (
-            <p className="text-sm text-gray-300 mt-2">{message}</p>
-          )}
+          {/* Status Message */}
+          {message && <p className="text-sm text-gray-300 mt-2">{message}</p>}
         </form>
       )}
     </div>
