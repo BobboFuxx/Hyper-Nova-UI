@@ -6,13 +6,12 @@ import { useTrades } from "../hooks/useTrades";
 export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
   const { 
-    loading, 
     error, 
     lastTx, 
     placeSpotTrade, 
-    getSpotFee, 
+    getSpotTradeFee, 
     placePerpTrade, 
-    getPerpFee 
+    getPerpTradeFee 
   } = useTrades();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -20,6 +19,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const [price, setPrice] = useState("");
   const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
   const parsedAmount = parseFloat(amount);
@@ -37,14 +37,14 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
       try {
         const fee =
           marketType === "spot"
-            ? await getSpotFee({
+            ? await getSpotTradeFee({
                 chain: activeWallet,
                 address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
                 side,
                 amount: parsedAmount,
                 price: parsedPrice,
               })
-            : await getPerpFee({
+            : await getPerpTradeFee({
                 chain: activeWallet,
                 address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
                 side,
@@ -59,7 +59,7 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [side, parsedAmount, parsedPrice, connected, activeWallet, connectedAddress, solanaPublicKey, marketType, getSpotFee, getPerpFee]);
+  }, [side, parsedAmount, parsedPrice, connected, activeWallet, connectedAddress, solanaPublicKey, marketType, getSpotTradeFee, getPerpTradeFee]);
 
   // -------------------- Handle trade --------------------
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,7 +75,9 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     }
 
     try {
+      setLoading(true);
       setMessage("");
+
       const params = {
         chain: activeWallet,
         address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
@@ -96,6 +98,8 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     } catch (err: any) {
       console.error(err);
       setMessage(error || `Trade failed on ${activeWallet}.`);
+    } finally {
+      setLoading(false);
     }
   };
 
