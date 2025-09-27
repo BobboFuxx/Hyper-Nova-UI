@@ -17,7 +17,16 @@ export default function TradeForm() {
 
   // -------------------- Debounced fee estimation --------------------
   useEffect(() => {
-    if (!connectedAddress || !amount || !price) {
+    // Safety check: Only estimate if wallet & activeWallet exist
+    if (!connectedAddress || !amount || !price || !activeWallet) {
+      setEstimatedFee(null);
+      return;
+    }
+
+    // Validate numeric inputs
+    const parsedAmount = parseFloat(amount);
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
       setEstimatedFee(null);
       return;
     }
@@ -26,10 +35,10 @@ export default function TradeForm() {
       try {
         const fee = await estimateFee({
           address: connectedAddress,
-          chain: activeWallet!,
+          chain: activeWallet,
           side,
-          amount: parseFloat(amount),
-          price: parseFloat(price),
+          amount: parsedAmount,
+          price: parsedPrice,
         });
         setEstimatedFee(fee);
       } catch (err) {
@@ -45,13 +54,16 @@ export default function TradeForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!connectedAddress) {
+    if (!connectedAddress || !activeWallet) {
       setMessage("Please connect your wallet first.");
       return;
     }
 
-    if (!amount || !price) {
-      setMessage("Please enter amount and price.");
+    // Validate numeric inputs
+    const parsedAmount = parseFloat(amount);
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
+      setMessage("Please enter valid amount and price.");
       return;
     }
 
@@ -61,10 +73,10 @@ export default function TradeForm() {
 
       const tx = await executeTrade({
         address: connectedAddress,
-        chain: activeWallet!,
+        chain: activeWallet,
         side,
-        amount: parseFloat(amount),
-        price: parseFloat(price),
+        amount: parsedAmount,
+        price: parsedPrice,
       });
 
       setMessage(`Trade executed! Tx: ${tx}`);
@@ -79,7 +91,7 @@ export default function TradeForm() {
     }
   };
 
-  const connected = !!connectedAddress;
+  const connected = !!connectedAddress && !!activeWallet;
 
   return (
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
@@ -155,7 +167,7 @@ export default function TradeForm() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || estimatedFee === null} // Prevent submission if fee not available
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
             {loading
