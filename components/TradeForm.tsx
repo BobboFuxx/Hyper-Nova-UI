@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { executeTrade, estimateFee } from "../lib/api"; // multi-chain API
 import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
+import { PublicKey } from "@solana/web3.js";
 
 export default function TradeForm() {
   const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
@@ -12,18 +13,15 @@ export default function TradeForm() {
   const [message, setMessage] = useState("");
   const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
 
-  const connectedAddress =
-    cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
+  const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
 
   // -------------------- Debounced fee estimation --------------------
   useEffect(() => {
-    // Safety check: Only estimate if wallet & activeWallet exist
     if (!connectedAddress || !amount || !price || !activeWallet) {
       setEstimatedFee(null);
       return;
     }
 
-    // Validate numeric inputs
     const parsedAmount = parseFloat(amount);
     const parsedPrice = parseFloat(price);
     if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
@@ -42,13 +40,18 @@ export default function TradeForm() {
         });
         setEstimatedFee(fee);
       } catch (err) {
-        console.error("Failed to estimate fee:", err);
+        console.error(`Fee estimation failed on ${activeWallet}:`, err);
         setEstimatedFee(null);
       }
     }, 500); // 500ms debounce
 
-    return () => clearTimeout(handler); // cleanup on change
+    return () => clearTimeout(handler);
   }, [connectedAddress, amount, price, side, activeWallet]);
+
+  // -------------------- Reset fee when switching chains --------------------
+  useEffect(() => {
+    setEstimatedFee(null);
+  }, [activeWallet]);
 
   // -------------------- Handle trade submit --------------------
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,7 +62,6 @@ export default function TradeForm() {
       return;
     }
 
-    // Validate numeric inputs
     const parsedAmount = parseFloat(amount);
     const parsedPrice = parseFloat(price);
     if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
@@ -72,20 +74,23 @@ export default function TradeForm() {
       setMessage("");
 
       const tx = await executeTrade({
-        address: connectedAddress,
+        address:
+          activeWallet === "Solana" && solanaPublicKey
+            ? solanaPublicKey
+            : connectedAddress,
         chain: activeWallet,
         side,
         amount: parsedAmount,
         price: parsedPrice,
       });
 
-      setMessage(`Trade executed! Tx: ${tx}`);
+      setMessage(`Trade executed on ${activeWallet}! Tx: ${tx}`);
       setAmount("");
       setPrice("");
       setEstimatedFee(null);
     } catch (err: any) {
       console.error(err);
-      setMessage("Trade failed. Check console for details.");
+      setMessage(`Trade failed on ${activeWallet}. Check console for details.`);
     } finally {
       setLoading(false);
     }
@@ -167,7 +172,12 @@ export default function TradeForm() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading || estimatedFee === null} // Prevent submission if fee not available
+            disabled={
+              loading ||
+              estimatedFee === null ||
+              parseFloat(amount) <= 0 ||
+              parseFloat(price) <= 0
+            }
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
             {loading
