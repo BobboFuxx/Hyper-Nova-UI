@@ -24,7 +24,7 @@ export default function WalletConnect() {
 
   const [activeWallet, setActiveWallet] = useState<string>("");
 
-  // Show selected wallet
+  // Update active wallet
   useEffect(() => {
     if (cosmosAddress) setActiveWallet("Cosmos");
     else if (evmAddress) setActiveWallet("EVM");
@@ -36,7 +36,6 @@ export default function WalletConnect() {
     <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
       <h2 className="text-lg font-semibold mb-3">Wallet Connection</h2>
 
-      {/* Already connected */}
       {activeWallet ? (
         <div className="space-y-2">
           <p className="text-gray-300">
