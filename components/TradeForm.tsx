@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { executeTrade, estimateFee } from "../lib/api"; // multi-chain API
 import { useWallet } from "../hooks/useWallet"; // multi-chain wallet
 import { PublicKey } from "@solana/web3.js";
@@ -14,16 +14,18 @@ export default function TradeForm() {
   const [estimatedFee, setEstimatedFee] = useState<number | null>(null);
 
   const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
+  const feeInterval = useRef<NodeJS.Timer | null>(null);
 
-  // -------------------- Debounced fee estimation --------------------
+  const parsedAmount = parseFloat(amount);
+  const parsedPrice = parseFloat(price);
+
+  // -------------------- Estimate fee (debounced) --------------------
   useEffect(() => {
     if (!connectedAddress || !amount || !price || !activeWallet) {
       setEstimatedFee(null);
       return;
     }
 
-    const parsedAmount = parseFloat(amount);
-    const parsedPrice = parseFloat(price);
     if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
       setEstimatedFee(null);
       return;
@@ -32,7 +34,10 @@ export default function TradeForm() {
     const handler = setTimeout(async () => {
       try {
         const fee = await estimateFee({
-          address: connectedAddress,
+          address:
+            activeWallet === "Solana" && solanaPublicKey
+              ? solanaPublicKey
+              : connectedAddress,
           chain: activeWallet,
           side,
           amount: parsedAmount,
@@ -43,15 +48,40 @@ export default function TradeForm() {
         console.error(`Fee estimation failed on ${activeWallet}:`, err);
         setEstimatedFee(null);
       }
-    }, 500); // 500ms debounce
+    }, 500); // debounce
 
     return () => clearTimeout(handler);
   }, [connectedAddress, amount, price, side, activeWallet]);
 
-  // -------------------- Reset fee when switching chains --------------------
+  // -------------------- Real-time fee updater --------------------
   useEffect(() => {
-    setEstimatedFee(null);
-  }, [activeWallet]);
+    // Clear any existing interval
+    if (feeInterval.current) clearInterval(feeInterval.current);
+
+    if (!connectedAddress || !activeWallet || isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) return;
+
+    feeInterval.current = setInterval(async () => {
+      try {
+        const fee = await estimateFee({
+          address:
+            activeWallet === "Solana" && solanaPublicKey
+              ? solanaPublicKey
+              : connectedAddress,
+          chain: activeWallet,
+          side,
+          amount: parsedAmount,
+          price: parsedPrice,
+        });
+        setEstimatedFee(fee);
+      } catch (err) {
+        console.error(`Real-time fee estimation failed on ${activeWallet}:`, err);
+      }
+    }, 5000); // update every 5 seconds
+
+    return () => {
+      if (feeInterval.current) clearInterval(feeInterval.current);
+    };
+  }, [connectedAddress, activeWallet, side, parsedAmount, parsedPrice, solanaPublicKey]);
 
   // -------------------- Handle trade submit --------------------
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,8 +92,6 @@ export default function TradeForm() {
       return;
     }
 
-    const parsedAmount = parseFloat(amount);
-    const parsedPrice = parseFloat(price);
     if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
       setMessage("Please enter valid amount and price.");
       return;
@@ -175,8 +203,8 @@ export default function TradeForm() {
             disabled={
               loading ||
               estimatedFee === null ||
-              parseFloat(amount) <= 0 ||
-              parseFloat(price) <= 0
+              parsedAmount <= 0 ||
+              parsedPrice <= 0
             }
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
