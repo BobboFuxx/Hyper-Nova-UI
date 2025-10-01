@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "../hooks/useWallet";
 import { useTrades } from "../hooks/useTrades";
 import { useMarket } from "../hooks/useMarket";
@@ -9,7 +8,6 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const { 
     loading, 
     error, 
-    lastTx, 
     placeSpotTrade, 
     getSpotFee, 
     placePerpTrade, 
@@ -31,13 +29,12 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
 
   const { bestBid, bestAsk, lastPrice, suggestedAmount } = useMarket(activeWallet, marketType);
 
-  // -------------------- Unified fee estimation --------------------
+  // -------------------- Fee Estimation --------------------
   const estimateCurrentFee = useCallback(async () => {
     if (!connected || parsedAmount <= 0 || parsedPrice <= 0) {
       setEstimatedFee(null);
       return;
     }
-
     try {
       const fee =
         marketType === "spot"
@@ -73,13 +70,11 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     getPerpFee,
   ]);
 
-  // -------------------- Debounced fee estimation --------------------
   useEffect(() => {
     const handler = setTimeout(estimateCurrentFee, 500);
     return () => clearTimeout(handler);
   }, [estimateCurrentFee]);
 
-  // -------------------- Real-time fee updates --------------------
   useEffect(() => {
     if (feeInterval.current) clearInterval(feeInterval.current);
     if (!connected || parsedAmount <= 0 || parsedPrice <= 0) return;
@@ -90,46 +85,35 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     };
   }, [estimateCurrentFee, connected, parsedAmount, parsedPrice]);
 
-  // -------------------- Immediate fee refresh on wallet/chain change --------------------
   useEffect(() => {
     estimateCurrentFee();
   }, [activeWallet, connectedAddress, solanaPublicKey, estimateCurrentFee]);
 
-  // -------------------- Check if current price matches best bid/ask --------------------
+  // -------------------- Glow for Best Price --------------------
   const isBestPrice =
     (side === "buy" && parsedPrice === bestAsk) ||
     (side === "sell" && parsedPrice === bestBid);
 
-  // -------------------- Animated glow intensity & dynamic color --------------------
   useEffect(() => {
     if (!parsedPrice || !bestBid || !bestAsk) return;
-
     let targetIntensity = 0;
     if (isBestPrice) {
-      targetIntensity = 1; // full pulse for exact match
+      targetIntensity = 1;
     } else {
       const diff = side === "buy" ? Math.abs(parsedPrice - bestAsk) : Math.abs(parsedPrice - bestBid);
       const refPrice = side === "buy" ? bestAsk : bestBid;
       targetIntensity = Math.max(0, 1 - diff / (refPrice * 0.05));
     }
-
-    setGlowIntensity((prev) => {
-      const alpha = 0.1; // smoothing factor
-      return prev + (targetIntensity - prev) * alpha;
-    });
+    setGlowIntensity((prev) => prev + (targetIntensity - prev) * 0.1);
   }, [parsedPrice, bestBid, bestAsk, side, isBestPrice]);
 
-  const glowColor = isBestPrice
+  const glowStyle = isBestPrice
     ? "bg-yellow-500 text-black animate-pulse cursor-pointer"
     : side === "buy"
-    ? `bg-[rgba(0,255,0,${glowIntensity})] text-white` // green for buy
-    : `bg-[rgba(255,0,0,${glowIntensity})] text-white`; // red for sell
+    ? `bg-[rgba(0,255,0,${glowIntensity})] text-white shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(0,255,0,0.5)] transition-all`
+    : `bg-[rgba(255,0,0,${glowIntensity})] text-white shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(255,0,0,0.5)] transition-all`;
 
-  const glowStyle = isBestPrice
-    ? glowColor
-    : `shadow-[0_0_${8 * glowIntensity}px_${2 * glowIntensity}px_rgba(255,215,0,${0.6 * glowIntensity})] transition-shadow duration-300 ease-in-out ${glowColor}`;
-
-  // -------------------- Handle trade --------------------
+  // -------------------- Submit --------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!connected) return setMessage("Please connect your wallet first.");
@@ -150,17 +134,17 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
           ? await placeSpotTrade(params)
           : await placePerpTrade(params);
 
-      setMessage(`Trade executed on ${activeWallet}! Tx: ${tx}`);
+      setMessage(`✅ Trade executed on ${activeWallet}! Tx: ${tx}`);
       setAmount("");
       setPrice("");
       setEstimatedFee(null);
     } catch (err: any) {
       console.error(err);
-      setMessage(error || `Trade failed on ${activeWallet}.`);
+      setMessage(error || `❌ Trade failed on ${activeWallet}.`);
     }
   };
 
-  // -------------------- Fill suggested amount when clicking best-price input --------------------
+  // -------------------- Autofill Best Price --------------------
   const handlePriceClick = () => {
     if (isBestPrice && suggestedAmount) {
       setAmount(suggestedAmount.toString());
@@ -168,13 +152,15 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   };
 
   return (
-    <div className="p-4 bg-gray-900 rounded-md border border-gray-700">
-      <h2 className="text-lg font-semibold mb-3">Place {marketType.toUpperCase()} Order</h2>
+    <div className="p-4 bg-gray-900 rounded-md border border-gray-700 shadow-lg">
+      <h2 className="text-lg font-semibold mb-3 text-white">
+        Place {marketType.toUpperCase()} Order
+      </h2>
 
       {!connected ? (
         <button
           onClick={connect}
-          className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white"
+          className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white w-full"
         >
           Connect Wallet
         </button>
@@ -185,14 +171,18 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
             <button
               type="button"
               onClick={() => setSide("buy")}
-              className={`flex-1 px-3 py-2 rounded-md ${side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"}`}
+              className={`flex-1 px-3 py-2 rounded-md ${
+                side === "buy" ? "bg-green-500 text-white" : "bg-gray-800"
+              }`}
             >
               Buy
             </button>
             <button
               type="button"
               onClick={() => setSide("sell")}
-              className={`flex-1 px-3 py-2 rounded-md ${side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"}`}
+              className={`flex-1 px-3 py-2 rounded-md ${
+                side === "sell" ? "bg-red-500 text-white" : "bg-gray-800"
+              }`}
             >
               Sell
             </button>
@@ -209,6 +199,9 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
               onClick={handlePriceClick}
               className={`w-full p-2 rounded-md ${glowStyle}`}
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Best Bid: {bestBid} | Best Ask: {bestAsk} | Last: {lastPrice}
+            </p>
           </div>
           <div>
             <label className="block text-sm text-gray-400">Amount</label>
