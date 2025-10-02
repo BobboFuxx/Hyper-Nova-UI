@@ -1,16 +1,13 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useOrderbook } from "../hooks/useOrderbook";
+import { Order, OrderBookData } from "../types";
 
 interface OrderBookProps {
   symbol: string;
+  onSelectOrder?: (order: Order, side: "bid" | "ask") => void;
 }
 
-interface Order {
-  price: number;
-  amount: number;
-}
-
-export default function OrderBook({ symbol }: OrderBookProps) {
+export default function OrderBook({ symbol, onSelectOrder }: OrderBookProps) {
   const { orders, fetchOrderbook } = useOrderbook(symbol);
   const [loading, setLoading] = useState(true);
 
@@ -36,6 +33,35 @@ export default function OrderBook({ symbol }: OrderBookProps) {
     [orders.asks]
   );
 
+  const renderOrderRow = (
+    order: Order,
+    index: number,
+    side: "bid" | "ask",
+    maxAmount: number
+  ) => {
+    const isBid = side === "bid";
+    const color = isBid ? "green" : "red";
+    const depthWidth = `${(order.amount / maxAmount) * 100}%`;
+
+    return (
+      <li
+        key={`${side}-${index}`}
+        className="relative flex justify-between px-1 py-0.5 rounded cursor-pointer hover:opacity-80"
+        onClick={() => onSelectOrder?.(order, side)}
+      >
+        {/* depth bar */}
+        <span
+          className={`absolute top-0 h-full bg-${color}-500/20 -z-10 rounded ${
+            isBid ? "left-0" : "right-0"
+          }`}
+          style={{ width: depthWidth }}
+        />
+        <span className={`text-${color}-400`}>{order.price.toFixed(2)}</span>
+        <span className="text-gray-200">{order.amount.toFixed(4)}</span>
+      </li>
+    );
+  };
+
   if (loading) {
     return <div className="text-gray-400">Loading orderbook...</div>;
   }
@@ -48,22 +74,9 @@ export default function OrderBook({ symbol }: OrderBookProps) {
         <div>
           <h3 className="text-xs text-green-400 mb-1">Bids</h3>
           <ul className="space-y-1">
-            {orders.bids.slice(0, 12).map((o: Order, i: number) => (
-              <li
-                key={`bid-${i}`}
-                className="relative flex justify-between px-1 py-0.5 rounded cursor-pointer hover:opacity-80"
-              >
-                {/* depth bar */}
-                <span
-                  className="absolute left-0 top-0 h-full bg-green-500/20 -z-10 rounded"
-                  style={{
-                    width: `${(o.amount / maxBidAmount) * 100}%`,
-                  }}
-                />
-                <span className="text-green-400">{o.price.toFixed(2)}</span>
-                <span className="text-gray-200">{o.amount.toFixed(4)}</span>
-              </li>
-            ))}
+            {orders.bids.slice(0, 12).map((o, i) =>
+              renderOrderRow(o, i, "bid", maxBidAmount)
+            )}
           </ul>
         </div>
 
@@ -71,22 +84,9 @@ export default function OrderBook({ symbol }: OrderBookProps) {
         <div>
           <h3 className="text-xs text-red-400 mb-1">Asks</h3>
           <ul className="space-y-1">
-            {orders.asks.slice(0, 12).map((o: Order, i: number) => (
-              <li
-                key={`ask-${i}`}
-                className="relative flex justify-between px-1 py-0.5 rounded cursor-pointer hover:opacity-80"
-              >
-                {/* depth bar */}
-                <span
-                  className="absolute right-0 top-0 h-full bg-red-500/20 -z-10 rounded"
-                  style={{
-                    width: `${(o.amount / maxAskAmount) * 100}%`,
-                  }}
-                />
-                <span className="text-red-400">{o.price.toFixed(2)}</span>
-                <span className="text-gray-200">{o.amount.toFixed(4)}</span>
-              </li>
-            ))}
+            {orders.asks.slice(0, 12).map((o, i) =>
+              renderOrderRow(o, i, "ask", maxAskAmount)
+            )}
           </ul>
         </div>
       </div>
