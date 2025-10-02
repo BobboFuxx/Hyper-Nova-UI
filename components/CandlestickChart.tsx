@@ -6,15 +6,7 @@ import {
   CandlestickSeriesPartialOptions,
   HistogramSeriesPartialOptions,
 } from "lightweight-charts";
-
-interface Candle {
-  time: UTCTimestamp;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
-}
+import { Candle } from "../types";
 
 interface CandlestickChartProps {
   data: Candle[];
@@ -33,6 +25,7 @@ export default function CandlestickChart({
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -42,13 +35,13 @@ export default function CandlestickChart({
       chartRef.current.remove();
     }
 
-    // Create new chart
+    // Create chart
     const chart = createChart(chartContainerRef.current, {
       width: width || chartContainerRef.current.clientWidth,
       height,
       layout: {
-        background: { color: "#0f172a" }, // dark slate background
-        textColor: "#cbd5e1", // slate text
+        background: { color: "#0f172a" },
+        textColor: "#cbd5e1",
       },
       grid: {
         vertLines: { color: "#1e293b" },
@@ -66,8 +59,8 @@ export default function CandlestickChart({
 
     // Candle options
     const candleOptions: CandlestickSeriesPartialOptions = {
-      upColor: icyMode ? "#38bdf8" : "#22c55e", // cyan or green
-      downColor: icyMode ? "#a78bfa" : "#ef4444", // purple or red
+      upColor: icyMode ? "#38bdf8" : "#22c55e",
+      downColor: icyMode ? "#a78bfa" : "#ef4444",
       borderUpColor: icyMode ? "#38bdf8" : "#22c55e",
       borderDownColor: icyMode ? "#a78bfa" : "#ef4444",
       wickUpColor: icyMode ? "#38bdf8" : "#22c55e",
@@ -77,23 +70,53 @@ export default function CandlestickChart({
     const candleSeries = chart.addCandlestickSeries(candleOptions);
     candleSeries.setData(data);
 
-    // Volume histogram overlay (optional)
+    // Volume histogram overlay
     if (showVolume) {
       const volumeSeries = chart.addHistogramSeries({
-        color: "#6366f1", // indigo bars
         priceFormat: { type: "volume" },
-        priceScaleId: "", // separate scale
+        priceScaleId: "",
         scaleMargins: { top: 0.8, bottom: 0 },
       } as HistogramSeriesPartialOptions);
 
       volumeSeries.setData(
         data.map((candle) => ({
-          time: candle.time,
+          time: candle.time as UTCTimestamp,
           value: candle.volume || 0,
-          color: candle.close > candle.open ? "#22c55e" : "#ef4444", // green/red volume
+          color: candle.close > candle.open ? "#22c55e" : "#ef4444",
         }))
       );
     }
+
+    // Tooltip
+    const tooltip = document.createElement("div");
+    tooltip.className =
+      "absolute bg-gray-900 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 pointer-events-none z-50";
+    tooltip.style.display = "none";
+    chartContainerRef.current.appendChild(tooltip);
+    tooltipRef.current = tooltip;
+
+    chart.subscribeCrosshairMove((param) => {
+      if (!tooltipRef.current) return;
+      if (!param.time || !param.seriesData.size) {
+        tooltipRef.current.style.display = "none";
+        return;
+      }
+
+      const candle = param.seriesData.get(candleSeries) as any;
+      if (!candle) return;
+
+      tooltipRef.current.style.display = "block";
+      tooltipRef.current.style.left = `${param.point?.x ?? 0 + 15}px`;
+      tooltipRef.current.style.top = `${param.point?.y ?? 0 - 30}px`;
+
+      tooltipRef.current.innerHTML = `
+        <div>O: ${candle.open}</div>
+        <div>H: ${candle.high}</div>
+        <div>L: ${candle.low}</div>
+        <div>C: ${candle.close}</div>
+        ${candle.value ? `<div>V: ${candle.value}</div>` : ""}
+      `;
+    });
 
     chartRef.current = chart;
 
@@ -110,9 +133,14 @@ export default function CandlestickChart({
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      if (tooltipRef.current) {
+        tooltipRef.current.remove();
+      }
       chart.remove();
     };
   }, [data, icyMode, width, height, showVolume]);
 
-  return <div ref={chartContainerRef} style={{ width: "100%", height }} />;
+  return (
+    <div className="relative" ref={chartContainerRef} style={{ width: "100%", height }} />
+  );
 }
