@@ -2,19 +2,11 @@ import { useEffect, useRef } from "react";
 import {
   createChart,
   IChartApi,
-  UTCTimestamp,
   CandlestickSeriesPartialOptions,
   HistogramSeriesPartialOptions,
+  CrosshairMode,
 } from "lightweight-charts";
-import { Candle } from "../types";
-
-interface CandlestickChartProps {
-  data: Candle[];
-  icyMode?: boolean; // toggle icy vs. classic candles
-  width?: number;
-  height?: number;
-  showVolume?: boolean; // toggle volume overlay
-}
+import { Candle, CandlestickChartProps } from "../types";
 
 export default function CandlestickChart({
   data,
@@ -30,7 +22,7 @@ export default function CandlestickChart({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Destroy old chart
+    // Destroy old chart instance if exists
     if (chartRef.current) {
       chartRef.current.remove();
     }
@@ -47,7 +39,7 @@ export default function CandlestickChart({
         vertLines: { color: "#1e293b" },
         horzLines: { color: "#1e293b" },
       },
-      crosshair: { mode: 1 },
+      crosshair: { mode: CrosshairMode.Normal },
       timeScale: {
         timeVisible: true,
         borderColor: "#334155",
@@ -57,7 +49,7 @@ export default function CandlestickChart({
       },
     });
 
-    // Candle options
+    // Candlestick options
     const candleOptions: CandlestickSeriesPartialOptions = {
       upColor: icyMode ? "#38bdf8" : "#22c55e",
       downColor: icyMode ? "#a78bfa" : "#ef4444",
@@ -79,15 +71,15 @@ export default function CandlestickChart({
       } as HistogramSeriesPartialOptions);
 
       volumeSeries.setData(
-        data.map((candle) => ({
-          time: candle.time as UTCTimestamp,
-          value: candle.volume || 0,
+        data.map((candle: Candle) => ({
+          time: candle.time,
+          value: candle.volume ?? 0,
           color: candle.close > candle.open ? "#22c55e" : "#ef4444",
         }))
       );
     }
 
-    // Tooltip
+    // Tooltip setup
     const tooltip = document.createElement("div");
     tooltip.className =
       "absolute bg-gray-900 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 pointer-events-none z-50";
@@ -97,24 +89,25 @@ export default function CandlestickChart({
 
     chart.subscribeCrosshairMove((param) => {
       if (!tooltipRef.current) return;
-      if (!param.time || !param.seriesData.size) {
+
+      if (!param.time || !param.seriesData.size || !param.point) {
         tooltipRef.current.style.display = "none";
         return;
       }
 
-      const candle = param.seriesData.get(candleSeries) as any;
+      const candle = param.seriesData.get(candleSeries) as Candle | undefined;
       if (!candle) return;
 
       tooltipRef.current.style.display = "block";
-      tooltipRef.current.style.left = `${param.point?.x ?? 0 + 15}px`;
-      tooltipRef.current.style.top = `${param.point?.y ?? 0 - 30}px`;
+      tooltipRef.current.style.left = `${param.point.x + 12}px`;
+      tooltipRef.current.style.top = `${param.point.y - 60}px`;
 
       tooltipRef.current.innerHTML = `
         <div>O: ${candle.open}</div>
         <div>H: ${candle.high}</div>
         <div>L: ${candle.low}</div>
         <div>C: ${candle.close}</div>
-        ${candle.value ? `<div>V: ${candle.value}</div>` : ""}
+        ${"volume" in candle && candle.volume ? `<div>V: ${candle.volume}</div>` : ""}
       `;
     });
 
@@ -141,6 +134,10 @@ export default function CandlestickChart({
   }, [data, icyMode, width, height, showVolume]);
 
   return (
-    <div className="relative" ref={chartContainerRef} style={{ width: "100%", height }} />
+    <div
+      className="relative"
+      ref={chartContainerRef}
+      style={{ width: "100%", height }}
+    />
   );
 }
