@@ -3,15 +3,24 @@ import { useWallet } from "../hooks/useWallet";
 import { useTrades } from "../hooks/useTrades";
 import { useMarket } from "../hooks/useMarket";
 
-export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
-  const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } = useWallet();
-  const { 
-    loading, 
-    error, 
-    placeSpotTrade, 
-    getSpotFee, 
-    placePerpTrade, 
-    getPerpFee 
+interface TradeFormProps {
+  marketType?: "spot" | "perp";
+  prefill?: { price: number; amount: number }; // 👈 add prefill from OrderBook
+}
+
+export default function TradeForm({
+  marketType = "spot",
+  prefill,
+}: TradeFormProps) {
+  const { cosmosAddress, evmAddress, solanaPublicKey, activeWallet, connect } =
+    useWallet();
+  const {
+    loading,
+    error,
+    placeSpotTrade,
+    getSpotFee,
+    placePerpTrade,
+    getPerpFee,
   } = useTrades();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -21,13 +30,23 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const [message, setMessage] = useState("");
   const [glowIntensity, setGlowIntensity] = useState(0);
 
-  const connectedAddress = cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
+  const connectedAddress =
+    cosmosAddress || evmAddress || solanaPublicKey?.toBase58();
   const parsedAmount = parseFloat(amount);
   const parsedPrice = parseFloat(price);
   const connected = !!connectedAddress && !!activeWallet;
   const feeInterval = useRef<NodeJS.Timer | null>(null);
 
-  const { bestBid, bestAsk, lastPrice, suggestedAmount } = useMarket(activeWallet, marketType);
+  const { bestBid, bestAsk, lastPrice, suggestedAmount } = useMarket(
+    activeWallet,
+    marketType
+  );
+
+  // -------------------- Prefill support --------------------
+  useEffect(() => {
+    if (prefill?.price) setPrice(prefill.price.toString());
+    if (prefill?.amount) setAmount(prefill.amount.toString());
+  }, [prefill]);
 
   // -------------------- Fee Estimation --------------------
   const estimateCurrentFee = useCallback(async () => {
@@ -40,14 +59,20 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
         marketType === "spot"
           ? await getSpotFee({
               chain: activeWallet,
-              address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
+              address:
+                activeWallet === "Solana" && solanaPublicKey
+                  ? solanaPublicKey
+                  : connectedAddress,
               side,
               amount: parsedAmount,
               price: parsedPrice,
             })
           : await getPerpFee({
               chain: activeWallet,
-              address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
+              address:
+                activeWallet === "Solana" && solanaPublicKey
+                  ? solanaPublicKey
+                  : connectedAddress,
               side,
               amount: parsedAmount,
               price: parsedPrice,
@@ -100,7 +125,10 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     if (isBestPrice) {
       targetIntensity = 1;
     } else {
-      const diff = side === "buy" ? Math.abs(parsedPrice - bestAsk) : Math.abs(parsedPrice - bestBid);
+      const diff =
+        side === "buy"
+          ? Math.abs(parsedPrice - bestAsk)
+          : Math.abs(parsedPrice - bestBid);
       const refPrice = side === "buy" ? bestAsk : bestBid;
       targetIntensity = Math.max(0, 1 - diff / (refPrice * 0.05));
     }
@@ -117,13 +145,17 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!connected) return setMessage("Please connect your wallet first.");
-    if (parsedAmount <= 0 || parsedPrice <= 0) return setMessage("Enter valid amount and price.");
+    if (parsedAmount <= 0 || parsedPrice <= 0)
+      return setMessage("Enter valid amount and price.");
 
     try {
       setMessage("");
       const params = {
         chain: activeWallet,
-        address: activeWallet === "Solana" && solanaPublicKey ? solanaPublicKey : connectedAddress,
+        address:
+          activeWallet === "Solana" && solanaPublicKey
+            ? solanaPublicKey
+            : connectedAddress,
         side,
         amount: parsedAmount,
         price: parsedPrice,
@@ -141,13 +173,6 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
     } catch (err: any) {
       console.error(err);
       setMessage(error || `❌ Trade failed on ${activeWallet}.`);
-    }
-  };
-
-  // -------------------- Autofill Best Price --------------------
-  const handlePriceClick = () => {
-    if (isBestPrice && suggestedAmount) {
-      setAmount(suggestedAmount.toString());
     }
   };
 
@@ -196,7 +221,6 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
               step="0.0001"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              onClick={handlePriceClick}
               className={`w-full p-2 rounded-md ${glowStyle}`}
             />
             <p className="text-xs text-gray-400 mt-1">
@@ -229,7 +253,12 @@ export default function TradeForm({ marketType = "spot" as "spot" | "perp" }) {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading || estimatedFee === null || parsedAmount <= 0 || parsedPrice <= 0}
+            disabled={
+              loading ||
+              estimatedFee === null ||
+              parsedAmount <= 0 ||
+              parsedPrice <= 0
+            }
             className="w-full bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-white disabled:opacity-50"
           >
             {loading ? "Placing Order..." : `Place ${side.toUpperCase()} Order`}
